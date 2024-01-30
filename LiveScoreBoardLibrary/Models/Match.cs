@@ -1,6 +1,6 @@
 ﻿namespace LiveScoreBoardLibrary.Models;
 
-public class Match
+public class Match : IComparable<Match>
 {
     public Guid MatchId { get; set; }
 
@@ -8,9 +8,26 @@ public class Match
 
     public Team AwayTeam { get; set; }
 
-    public MatchStatus Status { get; set; }
+    public DateTime StartDate { get; set; }
 
-    public DateTime StartedDate { get; set; }
+    public Match()
+    {
+        MatchId = Guid.NewGuid();
+    }
 
     public int GetTotalScore() => HomeTeam.Score + AwayTeam.Score;
+
+    public int CompareTo(Match other)
+    {
+        var scoreComparison = other.GetTotalScore().CompareTo(GetTotalScore());
+
+        if (scoreComparison != 0)
+        {
+            return scoreComparison;
+        }
+        else
+        {
+            return other.StartDate.CompareTo(StartDate);
+        }
+    }
 }

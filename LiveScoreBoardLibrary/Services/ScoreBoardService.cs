@@ -1,25 +1,41 @@
 ﻿using LiveScoreBoardLibrary.Models;
 using LiveScoreBoardLibrary.Services.Interfaces;
+using Match = LiveScoreBoardLibrary.Models.Match;
 
 namespace LiveScoreBoardLibrary.Services;
 
 public class ScoreBoardService : IScoreBoardService
 {
-    private readonly ScoreBoard scoreBoard;
+    private readonly ScoreBoard _scoreBoard;
 
     public ScoreBoardService()
     {
-        scoreBoard = new ScoreBoard();
+        _scoreBoard = new ScoreBoard();
+
     }
 
     public IEnumerable<Match> GetMatches()
     {
-        throw new NotImplementedException();
+        return _scoreBoard.Matches
+                          .OrderBy(m => m)
+                          .ToList();
     }
 
-    public void StartNewMatch(Match newMatch)
+    public void StartNewMatch(Team homeTeam, Team awayTeam, DateTime? startTime)
     {
-        throw new NotImplementedException();
+        if (startTime is null || startTime == DateTime.MinValue)
+        {
+            startTime = DateTime.UtcNow;
+        }
+
+        var match = new Match
+        {
+            HomeTeam = homeTeam,
+            AwayTeam = awayTeam,
+            StartDate = startTime.Value,
+        };
+
+        _scoreBoard.Matches.Add(match);
     }
 
     public void UpdateMatchScore(Guid matchId, TeamType teamType, int score)
@@ -27,8 +43,13 @@ public class ScoreBoardService : IScoreBoardService
         throw new NotImplementedException();
     }
 
-    public void FinsihMatch(Guid matchId)
+    public void FinishMatch(Guid matchId)
     {
         throw new NotImplementedException();
+    }
+
+    public void ClearBoard()
+    {
+        _scoreBoard.Matches.Clear();
     }
 }

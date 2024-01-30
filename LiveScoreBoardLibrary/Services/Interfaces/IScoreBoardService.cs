@@ -4,8 +4,13 @@ namespace LiveScoreBoardLibrary.Services.Interfaces;
 
 public interface IScoreBoardService
 {
-    void FinsihMatch(Guid matchId);
+    void FinishMatch(Guid matchId);
+
     IEnumerable<Match> GetMatches();
-    void StartNewMatch(Match newMatch);
+
+    void StartNewMatch(Team homeTeam, Team awayTeam, DateTime? startTime);
+
     void UpdateMatchScore(Guid matchId, TeamType teamType, int score);
+
+    void ClearBoard();
 }

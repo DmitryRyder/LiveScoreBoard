@@ -2,5 +2,5 @@
 
 public class ScoreBoard
 {
-    public ICollection<Match> Matches { get; set; }
+    public ICollection<Match> Matches { get; set; } = new List<Match>();
 }
