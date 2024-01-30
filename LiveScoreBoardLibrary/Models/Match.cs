@@ -2,7 +2,7 @@
 
 public class Match : IComparable<Match>
 {
-    public Guid MatchId { get; set; }
+    public Guid Id { get; set; }
 
     public Team HomeTeam { get; set; }
 
@@ -12,7 +12,7 @@ public class Match : IComparable<Match>
 
     public Match()
     {
-        MatchId = Guid.NewGuid();
+        Id = Guid.NewGuid();
     }
 
     public int GetTotalScore() => HomeTeam.Score + AwayTeam.Score;

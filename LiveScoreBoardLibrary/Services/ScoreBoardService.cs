@@ -1,5 +1,8 @@
-﻿using LiveScoreBoardLibrary.Models;
+﻿using FluentValidation;
+using LiveScoreBoardLibrary.Exceptions;
+using LiveScoreBoardLibrary.Models;
 using LiveScoreBoardLibrary.Services.Interfaces;
+using LiveScoreBoardLibrary.Validation;
 using Match = LiveScoreBoardLibrary.Models.Match;
 
 namespace LiveScoreBoardLibrary.Services;
@@ -28,6 +31,10 @@ public class ScoreBoardService : IScoreBoardService
             startTime = DateTime.UtcNow;
         }
 
+        var teamValidator = new TeamValidator(_scoreBoard.Matches);
+        teamValidator.ValidateAndThrow(homeTeam);
+        teamValidator.ValidateAndThrow(awayTeam);
+
         var match = new Match
         {
             HomeTeam = homeTeam,
@@ -40,12 +47,39 @@ public class ScoreBoardService : IScoreBoardService
 
     public void UpdateMatchScore(Guid matchId, TeamType teamType, int score)
     {
-        throw new NotImplementedException();
+        var updatedMatch = _scoreBoard.Matches.FirstOrDefault(match => match.Id == matchId);
+
+        if (updatedMatch == null)
+        {
+            throw new MatchNotFoundException("Match with the specified identifier not found");
+        }
+
+        if (score < 0)
+        {
+            throw new InvalidScoreException("Score must be a non-negative number");
+        }
+
+        switch (teamType)
+        {
+            case TeamType.Away:
+                updatedMatch.AwayTeam.Score = score;
+                break;
+            case TeamType.Home:
+                updatedMatch.HomeTeam.Score = score;
+                break;
+        }
     }
 
     public void FinishMatch(Guid matchId)
     {
-        throw new NotImplementedException();
+        var match = _scoreBoard.Matches.FirstOrDefault(match => match.Id == matchId);
+
+        if (match == null)
+        {
+            throw new MatchNotFoundException("Match with the specified identifier not found");
+        }
+
+        _scoreBoard.Matches.Remove(match);
     }
 
     public void ClearBoard()

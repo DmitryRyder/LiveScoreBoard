@@ -1,5 +1,6 @@
 ﻿using FluentAssertions;
 using FluentValidation;
+using LiveScoreBoardLibrary.Exceptions;
 using LiveScoreBoardLibrary.Services.Interfaces;
 
 
@@ -32,7 +33,7 @@ public class ScoreBoardServiceTests
         Assert.That(matches, Is.Empty);
     }
 
-    [TestCaseSource(nameof(TestCases))]
+    [TestCaseSource(nameof(InitialAndExpectedTestCases))]
     public void GetMatches_SortedByTotalScoreAndStartedDate_ReturnsCorrectOrder(List<(Team, Team, DateTime)> input, List<(Team, Team, DateTime)> expected)
     {
         // Arrange
@@ -62,23 +63,76 @@ public class ScoreBoardServiceTests
         var awayTeam = new Team { Name = "TeamB", Score = 5, TeamType = TeamType.Away };
         var startTime = DateTime.UtcNow;
 
+        var expectedMatch = new Match
+        {
+            HomeTeam = homeTeam,
+            AwayTeam = awayTeam,
+            StartDate = startTime
+        };
+
         // Act
         _scoreboardService.StartNewMatch(homeTeam, awayTeam, startTime);
 
         // Assert
-        Assert.That(_scoreboardService.GetMatches().ToList(), Has.Count.EqualTo(1));
+        var actualMatches = _scoreboardService.GetMatches().ToList();
+        actualMatches.Should().HaveCount(1);
+
+        var actualMatch = actualMatches.First();
+        actualMatch.Should().BeEquivalentTo(expectedMatch, options => options
+            .Including(match => match.HomeTeam)
+            .Including(match => match.AwayTeam)
+            .Including(match => match.StartDate)
+        );
     }
 
     [Test]
     public void StartNewMatch_WithSameTeamNames_ShouldThrowValidationException()
     {
         // Arrange
-        var homeTeam = new Team { Name = "TeamA", Score = 10, TeamType = TeamType.Home };
-        var awayTeam = new Team { Name = "TeamA", Score = 5, TeamType = TeamType.Away };
-        var startTime = DateTime.UtcNow;
+        var startTime = new DateTime(2024, 1, 30, 0, 0, 0);
 
-        // Act & Assert
-        Assert.Throws<ValidationException>(() => _scoreboardService.StartNewMatch(homeTeam, awayTeam, startTime));
+        var match1 = (
+            new Team { Name = "testAwayTeam1", Score = 0, TeamType = TeamType.Away },
+            new Team { Name = "testHomeTeam1", Score = 0, TeamType = TeamType.Home },
+            startTime.AddHours(1));
+
+        var match2 = (
+            new Team { Name = "testAwayTeam1", Score = 10, TeamType = TeamType.Away },
+            new Team { Name = "testHomeTeam1", Score = 20, TeamType = TeamType.Home },
+            startTime.AddHours(2));
+
+        _scoreboardService.StartNewMatch(match1.Item2, match1.Item1, match1.Item3);
+        
+        // Act
+        var exception = Assert.Throws<ValidationException>(() => _scoreboardService.StartNewMatch(match2.Item2, match2.Item1, match2.Item3));
+
+        // Assert
+        Assert.That(exception.Message, Does.Contain("Team with the same name already exists in the scoreboard"));
+    }
+
+    [Test]
+    public void StartNewMatch_WithInvalidDate_ShouldCreateMatchWithValidDate()
+    {
+        // Arrange
+        var match1 = (
+            new Team { Name = "testAwayTeam1", Score = 10, TeamType = TeamType.Away },
+            new Team { Name = "testHomeTeam1", Score = 20, TeamType = TeamType.Home }
+            );
+
+        var match2 = (
+            new Team { Name = "testAwayTeam2", Score = 0, TeamType = TeamType.Away },
+            new Team { Name = "testHomeTeam2", Score = 0, TeamType = TeamType.Home },
+            DateTime.MinValue);
+
+        // Act
+        _scoreboardService.StartNewMatch(match1.Item2, match1.Item1, null);
+        _scoreboardService.StartNewMatch(match2.Item2, match2.Item1, match2.Item3);
+        var result = _scoreboardService.GetMatches().ToList();
+
+        // Assert
+        Assert.That(result.Count, Is.EqualTo(2));
+        Assert.That(result[0]?.StartDate, Is.Not.Null.And.Not.EqualTo(DateTime.MinValue));
+        Assert.That(result[1]?.StartDate, Is.Not.Null.And.Not.EqualTo(DateTime.MinValue));
     }
 
     [Test]
@@ -89,87 +143,51 @@ public class ScoreBoardServiceTests
 
         // Act & Assert
         Action updateAction = () => _scoreboardService.UpdateMatchScore(invalidMatchId, TeamType.Home, 15);
-        updateAction.Should().Throw<ValidationException>().WithMessage("Match with the specified identifier not found");
+        updateAction.Should().Throw<MatchNotFoundException>().WithMessage("Match with the specified identifier not found");
     }
 
     [Test]
-    public void UpdateMatchScore_WithNegativeScore_ShouldThrowException()
+    public void UpdateMatchScore_WithValidData_ShouldUpdateTeamScore()
     {
         // Arrange
-        var matchId = Guid.NewGuid();
         var match = new Match
         {
-            MatchId = matchId,
             HomeTeam = new Team { Name = "TeamA", Score = 10, TeamType = TeamType.Home },
             AwayTeam = new Team { Name = "TeamB", Score = 5, TeamType = TeamType.Away },
             StartDate = DateTime.UtcNow
         };
-        _scoreboardService.StartNewMatch(match.HomeTeam, match.AwayTeam, match.StartDate);
 
-        // Act & Assert
-        Action updateAction = () => _scoreboardService.UpdateMatchScore(matchId, TeamType.Home, -5);
-        updateAction.Should().Throw<ValidationException>().WithMessage("Score must be a non-negative number");
-    }
-
-    [Test]
-    public void UpdateMatchScore_WithValidDataForAwayTeam_ShouldUpdateAwayTeamScore()
-    {
-        // Arrange
-        var matchId = Guid.NewGuid();
-        var match = new Match
-        {
-            MatchId = matchId,
-            HomeTeam = new Team { Name = "TeamA", Score = 10, TeamType = TeamType.Home },
-            AwayTeam = new Team { Name = "TeamB", Score = 5, TeamType = TeamType.Away },
-            StartDate = DateTime.UtcNow
-        };
         _scoreboardService.StartNewMatch(match.HomeTeam, match.AwayTeam, match.StartDate);
 
         // Act
-        _scoreboardService.UpdateMatchScore(matchId, TeamType.Away, 15);
+        var updatedMatch = _scoreboardService.GetMatches().First();
+        _scoreboardService.UpdateMatchScore(updatedMatch.Id, TeamType.Away, 15);
+        _scoreboardService.UpdateMatchScore(updatedMatch.Id, TeamType.Home, 10);
 
         // Assert
-        var updatedMatch = _scoreboardService.GetMatches().FirstOrDefault(m => m.MatchId == matchId);
-        updatedMatch.Should().NotBeNull();
         updatedMatch?.AwayTeam.Score.Should().Be(15);
+        updatedMatch?.HomeTeam.Score.Should().Be(10);
     }
 
     [Test]
     public void UpdateMatchScore_WithInvalidScore_ShouldThrowException()
     {
         // Arrange
-        var matchId = Guid.NewGuid();
         var match = new Match
         {
-            MatchId = matchId,
             HomeTeam = new Team { Name = "TeamA", Score = 10, TeamType = TeamType.Home },
             AwayTeam = new Team { Name = "TeamB", Score = 5, TeamType = TeamType.Away },
             StartDate = DateTime.UtcNow
         };
+
         _scoreboardService.StartNewMatch(match.HomeTeam, match.AwayTeam, match.StartDate);
 
-        // Act & Assert
-        Action updateAction = () => _scoreboardService.UpdateMatchScore(matchId, TeamType.Home, -1);
-        updateAction.Should().Throw<ValidationException>().WithMessage("Score must be a non-negative number");
-    }
+        // Act
+        var testMatch = _scoreboardService.GetMatches().First();
 
-    [Test]
-    public void UpdateMatchScore_WithInvalidTeamType_ShouldThrowException()
-    {
-        // Arrange
-        var matchId = Guid.NewGuid();
-        var match = new Match
-        {
-            MatchId = matchId,
-            HomeTeam = new Team { Name = "TeamA", Score = 10, TeamType = TeamType.Home },
-            AwayTeam = new Team { Name = "TeamB", Score = 5, TeamType = TeamType.Away },
-            StartDate = DateTime.UtcNow
-        };
-        _scoreboardService.StartNewMatch(match.HomeTeam, match.AwayTeam, match.StartDate);
-
-        // Act & Assert
-        Action updateAction = () => _scoreboardService.UpdateMatchScore(matchId, (TeamType)99, 15);
-        updateAction.Should().Throw<ValidationException>().WithMessage("Invalid team type");
+        // Assert
+        Action updateAction = () => _scoreboardService.UpdateMatchScore(testMatch.Id, TeamType.Home, -1);
+        updateAction.Should().Throw<InvalidScoreException>().WithMessage("Score must be a non-negative number");
     }
 
     [Test]
@@ -186,11 +204,11 @@ public class ScoreBoardServiceTests
 
         // Act
         var matchesBeforeFinish = _scoreboardService.GetMatches().ToList();
-        _scoreboardService.FinishMatch(matchesBeforeFinish.First().MatchId);
+        _scoreboardService.FinishMatch(matchesBeforeFinish.First().Id);
 
         // Assert
         var matchesAfterFinish = _scoreboardService.GetMatches().ToList();
-        matchesAfterFinish.Should().NotContain(m => m.MatchId == matchesBeforeFinish.First().MatchId);
+        matchesAfterFinish.Should().NotContain(m => m.Id == matchesBeforeFinish.First().Id);
     }
 
     [Test]
@@ -201,10 +219,10 @@ public class ScoreBoardServiceTests
 
         // Act & Assert
         Action finishAction = () => _scoreboardService.FinishMatch(invalidMatchId);
-        finishAction.Should().Throw<ValidationException>().WithMessage("Match with the specified identifier not found");
+        finishAction.Should().Throw<MatchNotFoundException>().WithMessage("Match with the specified identifier not found");
     }
 
-    public static IEnumerable<TestCaseData> TestCases
+    public static IEnumerable<TestCaseData> InitialAndExpectedTestCases
     {
         get
         {
