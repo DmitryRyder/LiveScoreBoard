@@ -1,4 +1,5 @@
 ﻿using FluentValidation;
+using LiveScoreBoardLibrary.DataLayer;
 using LiveScoreBoardLibrary.Exceptions;
 using LiveScoreBoardLibrary.Models;
 using LiveScoreBoardLibrary.Services.Interfaces;
@@ -9,11 +10,11 @@ namespace LiveScoreBoardLibrary.Services;
 
 public class ScoreBoardService : IScoreBoardService
 {
-    private readonly ScoreBoard _scoreBoard;
+    private readonly ScoreBoardStore _scoreBoard;
 
     public ScoreBoardService()
     {
-        _scoreBoard = new ScoreBoard();
+        _scoreBoard = new ScoreBoardStore();
 
     }
 
